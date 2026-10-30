@@ -1,0 +1,979 @@
+<title>Tidepool Pearl Dive</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=Figtree:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one full-bleed WebGL sea; two stacked one-screen scenes (shore → pearl garden) float over it in a single centered column. */
+:root{
+  --abyss:#03121F;
+  --deep:#072A3D;
+  --foam:#F3FAFC;
+  --mist:rgba(214,236,244,.84);
+  --gold:#F3C771;
+  --gold-hi:#FFE3A3;
+  --gold-lo:#E58A3A;
+  --glass:rgba(6,30,48,.44);
+  --glass-hi:rgba(12,48,70,.58);
+  --line:rgba(190,235,255,.22);
+  --ink-on-gold:#2A1606;
+  --font-display:'Fraunces','Iowan Old Style','Palatino Linotype',Georgia,serif;
+  --font-body:'Figtree','Segoe UI',system-ui,-apple-system,sans-serif;
+  --font-mono:'DM Mono',ui-monospace,'SF Mono',Menlo,Consolas,monospace;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--abyss);color:var(--foam);font-family:var(--font-body);overflow:hidden;overscroll-behavior:none;-webkit-tap-highlight-color:transparent;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+#gl{position:fixed;inset:0;width:100%;height:100%;display:block;z-index:0}
+.fallback{position:fixed;inset:0;z-index:0;display:none}
+html.no-gl .fallback{display:block;background:linear-gradient(180deg,#22407F 0%,#7FA4D8 30%,#F6C79A 43%,#7FA8B8 44%,#0A3F55 70%,#04172A 100%)}
+html.no-gl[data-scene="deep"] .fallback{background:linear-gradient(180deg,#2C9AAA 0%,#0B4A60 40%,#04192B 85%,#020C16 100%)}
+
+/* warped text: real DOM text for layout + screen readers; pixels come from the WebGL canvas */
+html.gl-text .wt,html.gl-text .wt *{color:transparent!important;-webkit-text-fill-color:transparent!important;background:none!important;text-shadow:none!important}
+
+.scene{position:fixed;inset:0;z-index:3;display:flex;flex-direction:column;
+  padding-top:calc(env(safe-area-inset-top,0px) + 16px);
+  padding-bottom:calc(env(safe-area-inset-bottom,0px) + 18px);
+  padding-left:max(20px,env(safe-area-inset-left,0px));
+  padding-right:max(20px,env(safe-area-inset-right,0px));
+  touch-action:none;user-select:none;-webkit-user-select:none;transition:opacity .45s ease}
+.scene.out{opacity:0;pointer-events:none}
+.rise{transition:opacity .6s ease,transform .8s cubic-bezier(.2,.9,.25,1);transition-delay:calc(var(--d,0) * 90ms)}
+.scene.pre .rise{opacity:0;transform:translateY(18px)}
+.col{width:100%;max-width:30rem;margin-inline:auto}
+
+/* ---------- shore ---------- */
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.brand{display:flex;align-items:center;gap:9px;font-family:var(--font-display);font-weight:600;font-size:1.5rem;letter-spacing:-.01em;text-shadow:0 2px 14px rgba(0,20,40,.35)}
+.brand i{color:var(--gold);font-style:normal}
+.pill{font-family:var(--font-mono);font-size:.68rem;letter-spacing:.2em;padding:.62em 1.05em;border-radius:999px;background:var(--glass);border:1px solid var(--line);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);white-space:nowrap}
+.hint{margin:auto;display:flex;align-items:center;gap:10px;padding:9px 16px 9px 10px;border-radius:999px;background:rgba(6,30,48,.32);border:1px solid rgba(190,235,255,.18);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);font-size:.82rem;color:var(--mist);transition:opacity .6s ease,transform .6s ease}
+.hint.gone{opacity:0;transform:translateY(-8px) scale(.96)}
+.hint .dot{position:relative;width:22px;height:22px;border-radius:50%;background:radial-gradient(circle,#fff 0 22%,rgba(255,255,255,.35) 24% 46%,transparent 48%)}
+.hint .dot::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:1.5px solid rgba(220,248,255,.7);animation:ping 1.8s ease-out infinite}
+@keyframes ping{0%{transform:scale(.5);opacity:1}100%{transform:scale(1.7);opacity:0}}
+
+.hero{display:flex;flex-direction:column;gap:14px}
+.eyebrow{font-family:var(--font-mono);font-size:.7rem;letter-spacing:.2em;color:var(--gold);margin:0}
+.display{font-family:var(--font-display);font-weight:600;font-size:clamp(2.7rem,12.6vw,4.9rem);line-height:.98;letter-spacing:-.025em;margin:0;text-wrap:balance}
+.display em,.display2 em{font-style:italic;font-weight:500;background:linear-gradient(160deg,var(--gold-hi),#F5B54A 55%,var(--gold-lo));-webkit-background-clip:text;background-clip:text;color:transparent}
+.display em{display:block}
+.lede{font-size:1.02rem;line-height:1.55;color:var(--mist);margin:0;max-width:35ch}
+.cta{position:relative;margin-top:8px;display:flex;align-items:center;justify-content:space-between;gap:16px;width:100%;padding:13px 13px 13px 22px;border-radius:24px;border:1px solid var(--line);
+  background:linear-gradient(135deg,rgba(12,48,72,.6),rgba(4,20,34,.6));-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);
+  text-align:left;cursor:pointer;overflow:hidden;box-shadow:0 22px 44px -20px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.09);transition:transform .25s ease,border-color .3s}
+.cta::before{content:"";position:absolute;inset:0;background:linear-gradient(105deg,transparent 35%,rgba(255,255,255,.13) 50%,transparent 65%);transform:translateX(-120%);animation:sheen 5s ease-in-out 1.8s infinite;pointer-events:none}
+@keyframes sheen{0%,62%{transform:translateX(-120%)}100%{transform:translateX(120%)}}
+.cta:hover{border-color:rgba(243,199,113,.45)}
+.cta:active{transform:scale(.98)}
+.cta:focus-visible,.ghost:focus-visible,.iconbtn:focus-visible,.solid:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.cta strong{display:block;font-size:1.08rem;font-weight:600}
+.cta small{display:block;font-size:.84rem;color:var(--mist);margin-top:3px}
+.cta-icon{position:relative;flex:none;width:54px;height:54px;border-radius:17px;display:grid;place-items:center;background:linear-gradient(145deg,var(--gold-hi),#F5B54A 55%,var(--gold-lo));color:var(--ink-on-gold);box-shadow:0 8px 24px -6px rgba(245,170,70,.7),inset 0 1px 0 rgba(255,255,255,.6)}
+.cta-icon::after{content:"";position:absolute;inset:0;border-radius:inherit;animation:halo 2.6s ease-out infinite}
+@keyframes halo{0%{box-shadow:0 0 0 0 rgba(245,190,91,.55)}100%{box-shadow:0 0 0 14px rgba(245,190,91,0)}}
+.cta-icon svg{transition:transform .3s cubic-bezier(.3,1.6,.5,1)}
+.cta:hover .cta-icon svg{transform:translateX(3px)}
+.foot{display:flex;align-items:center;gap:14px;font-family:var(--font-mono);font-size:.66rem;letter-spacing:.2em;color:var(--mist);margin-top:4px}
+.foot i{flex:1;max-width:70px;height:1px;background:linear-gradient(90deg,transparent,var(--gold),transparent)}
+@media (min-width:900px){#shore .col{margin-left:clamp(0px,7vw,140px)}}
+
+/* ---------- deep ---------- */
+.gamebar{display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:12px}
+.iconbtn{width:48px;height:48px;border-radius:16px;border:1px solid var(--line);background:var(--glass);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);display:grid;place-items:center;cursor:pointer;transition:transform .2s}
+.iconbtn:active{transform:scale(.94)}
+.where{text-align:center;min-width:0}
+.where strong{display:block;font-family:var(--font-display);font-weight:600;font-size:1.12rem}
+.where span{display:block;font-family:var(--font-mono);font-size:.6rem;letter-spacing:.22em;color:var(--mist);margin-top:3px}
+.count{border:1px solid var(--line);background:var(--glass);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px);border-radius:16px;padding:6px 12px;text-align:center;min-width:58px}
+.count b{display:block;font-family:var(--font-mono);font-weight:500;font-size:1.14rem;color:var(--gold);font-variant-numeric:tabular-nums}
+.count span{display:block;font-family:var(--font-mono);font-size:.56rem;letter-spacing:.2em;color:var(--mist)}
+.count.bump{animation:bump .55s cubic-bezier(.3,1.6,.5,1)}
+@keyframes bump{0%{transform:scale(1)}40%{transform:scale(1.18);box-shadow:0 0 26px rgba(245,190,91,.45)}100%{transform:scale(1)}}
+.intro{margin-top:clamp(14px,3.2vh,30px);display:flex;flex-direction:column;gap:8px}
+.display2{font-family:var(--font-display);font-weight:600;font-size:clamp(2.1rem,9.6vw,3.4rem);line-height:1;letter-spacing:-.02em;margin:0}
+.field{position:relative;flex:1;min-height:180px;margin-block:6px}
+.panel{position:relative;z-index:2;border:1px solid var(--line);background:linear-gradient(160deg,var(--glass-hi),rgba(3,18,31,.62));-webkit-backdrop-filter:blur(18px) saturate(1.3);backdrop-filter:blur(18px) saturate(1.3);border-radius:24px;padding:16px 18px 18px;display:flex;flex-direction:column;gap:14px;box-shadow:0 -10px 40px -20px rgba(0,0,0,.6)}
+.panel-top{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.panel-top > div{min-width:0}
+.tag{display:block;font-family:var(--font-mono);font-size:.62rem;letter-spacing:.22em;color:var(--gold)}
+.panel strong{display:block;font-size:1.1rem;font-weight:600;margin-top:6px}
+.panel small{display:block;font-size:.86rem;color:var(--mist);margin-top:3px;line-height:1.4}
+.ghost{flex:none;display:inline-flex;align-items:center;gap:7px;padding:9px 14px;border-radius:999px;border:1px solid var(--line);background:rgba(255,255,255,.04);font-size:.84rem;cursor:pointer;transition:background .2s,transform .2s}
+.ghost:hover{background:rgba(255,255,255,.09)}
+.ghost:active{transform:scale(.96)}
+.slots{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.slot{height:24px;border-radius:999px;background:rgba(150,220,240,.07);border:1px solid rgba(180,235,255,.14);display:grid;place-items:center;transition:background .5s,border-color .5s,box-shadow .5s}
+.slot i{width:15px;height:15px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#FFFDF2 0 14%,var(--gold-hi) 34%,#F2B24E 68%,#B9702B);box-shadow:0 0 10px rgba(255,196,96,.7);transform:scale(0);transition:transform .55s cubic-bezier(.3,1.7,.5,1)}
+.slot.filled{border-color:rgba(245,190,91,.45);background:rgba(245,190,91,.1);box-shadow:inset 0 0 14px rgba(245,190,91,.22)}
+.slot.filled i{transform:scale(1)}
+
+/* pearls */
+.pearl{position:absolute;left:var(--x);top:var(--y);width:86px;height:86px;margin:-43px 0 0 -43px;padding:0;border:0;background:none;cursor:pointer;border-radius:50%;touch-action:manipulation}
+.pearl.grow{animation:grow .8s cubic-bezier(.3,1.5,.5,1) both;animation-delay:calc(var(--i) * 110ms)}
+@keyframes grow{0%{transform:scale(0);opacity:0}100%{transform:scale(1);opacity:1}}
+.pearl:focus-visible{outline:2px solid var(--gold);outline-offset:4px}
+.bob{position:absolute;inset:0;animation:float calc(6s + var(--i) * .9s) ease-in-out infinite;animation-delay:calc(var(--i) * -1.3s)}
+@keyframes float{0%,100%{transform:translate(0,0)}25%{transform:translate(5px,-9px)}50%{transform:translate(-3px,-15px)}75%{transform:translate(-6px,-5px)}}
+.halo{position:absolute;inset:-4px;border-radius:50%;border:1px dashed rgba(190,240,255,.3);animation:spin 20s linear infinite}
+.halo::after{content:"";position:absolute;inset:4px;border-radius:50%;background:radial-gradient(circle,rgba(255,210,120,.2),transparent 66%);animation:breathe 3.2s ease-in-out infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes breathe{0%,100%{opacity:.5;transform:scale(.9)}50%{opacity:1;transform:scale(1.08)}}
+.orb{position:absolute;inset:9px;border-radius:50%;display:grid;place-items:center;transition:transform .3s cubic-bezier(.3,1.6,.5,1);
+  background:radial-gradient(circle at 32% 27%,rgba(255,255,255,.75) 0 5%,rgba(255,255,255,0) 17%),radial-gradient(circle,rgba(120,220,245,.05) 0 57%,rgba(170,240,255,.32) 69%,rgba(210,250,255,.62) 72%,rgba(170,240,255,0) 74%);
+  box-shadow:inset 0 -7px 16px rgba(120,220,255,.22),0 0 28px rgba(120,220,255,.16);animation:wobble 4.4s ease-in-out infinite}
+@keyframes wobble{0%,100%{border-radius:50%}33%{border-radius:47% 53% 50% 50%/53% 47% 53% 47%}66%{border-radius:53% 47% 48% 52%/47% 53% 47% 53%}}
+.pearl:hover .orb{transform:scale(1.08)}
+.core{width:28px;height:28px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#FFFDF2 0 12%,var(--gold-hi) 32%,#F2B24E 66%,#B9702B);animation:glow 2.4s ease-in-out infinite;animation-delay:calc(var(--i) * -.5s)}
+@keyframes glow{0%,100%{box-shadow:0 0 14px 3px rgba(255,196,96,.5),0 0 36px 8px rgba(255,180,80,.14)}50%{box-shadow:0 0 22px 6px rgba(255,206,110,.75),0 0 54px 14px rgba(255,180,80,.24)}}
+.pearl.taken{pointer-events:none}
+.pearl.taken .orb{animation:pop .5s ease-out forwards}
+.pearl.taken .halo{animation:fadeout .4s forwards}
+.pearl.taken .core{visibility:hidden}
+@keyframes pop{0%{transform:scale(1);opacity:1}55%{transform:scale(1.4);opacity:.55}100%{transform:scale(1.7);opacity:0}}
+@keyframes fadeout{to{opacity:0;transform:scale(1.4)}}
+
+.fx{position:fixed;left:0;top:0;pointer-events:none;z-index:20;border-radius:50%}
+.flyer{width:26px;height:26px;background:radial-gradient(circle at 35% 30%,#FFFDF2 0 12%,var(--gold-hi) 32%,#F2B24E 66%,#B9702B);box-shadow:0 0 18px 5px rgba(255,196,96,.6)}
+.trail{width:12px;height:12px;background:radial-gradient(circle,#FFF4D6,rgba(255,200,110,0) 70%)}
+.drop{width:7px;height:7px;background:radial-gradient(circle at 35% 30%,#fff,rgba(190,240,255,.5))}
+.ring{width:24px;height:24px;border:1.5px solid rgba(210,248,255,.85)}
+
+/* sea life (DOM, behind UI) */
+#sealife{position:fixed;inset:0;z-index:1;pointer-events:none;opacity:0;transition:opacity 1.2s ease;overflow:hidden}
+#sealife.on{opacity:1}
+.swim{position:absolute;left:0;top:var(--top);animation:swimL var(--dur) linear var(--delay) infinite}
+.swim.r{animation-name:swimR}
+@keyframes swimL{from{transform:translateX(110vw)}to{transform:translateX(-30vw)}}
+@keyframes swimR{from{transform:translateX(-30vw) scaleX(-1)}to{transform:translateX(110vw) scaleX(-1)}}
+.swim svg{display:block;animation:bobf 3.4s ease-in-out infinite;fill:rgba(150,225,235,var(--a,.22))}
+@keyframes bobf{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.tail{transform-origin:44px 12px;animation:wag .42s ease-in-out infinite alternate}
+@keyframes wag{from{transform:rotate(-16deg)}to{transform:rotate(16deg)}}
+.jelly{position:absolute;right:6%;top:30%;width:74px;animation:drift 11s ease-in-out infinite;filter:drop-shadow(0 0 14px rgba(210,170,255,.45))}
+@keyframes drift{0%,100%{transform:translate(0,0)}50%{transform:translate(-18px,-56px)}}
+.bell{transform-origin:40px 40px;transform-box:view-box;animation:pulse 2.2s ease-in-out infinite}
+@keyframes pulse{0%,100%{transform:scale(1,1)}45%{transform:scale(.88,1.1)}}
+.tent{transform-origin:40px 42px;animation:sway 2.2s ease-in-out infinite}
+@keyframes sway{0%,100%{transform:skewX(4deg)}50%{transform:skewX(-6deg) scaleY(.94)}}
+.kelp{position:absolute;bottom:0;height:46vh;width:auto}
+.kelp.l{left:-14px}
+.kelp.r{right:-18px;transform:scaleX(-1)}
+.stalk{transform-origin:50% 100%;transform-box:fill-box;animation:kelp 6s ease-in-out infinite}
+.stalk:nth-child(2){animation-duration:7.5s;animation-delay:-2s}
+.stalk:nth-child(3){animation-duration:5.4s;animation-delay:-3.5s}
+@keyframes kelp{0%,100%{transform:rotate(-3deg)}50%{transform:rotate(4deg)}}
+
+/* depth readout during the dive */
+.depth{position:fixed;inset:0;z-index:6;display:grid;place-items:center;pointer-events:none;opacity:0;transition:opacity .35s ease}
+.depth.on{opacity:1}
+.depth div{text-align:center;font-family:var(--font-mono);font-size:.72rem;letter-spacing:.3em;color:var(--mist)}
+.depth b{display:block;font-family:var(--font-display);font-weight:500;font-style:italic;font-size:4.6rem;letter-spacing:-.02em;color:var(--foam);font-variant-numeric:tabular-nums;text-shadow:0 0 30px rgba(140,230,255,.5)}
+
+/* finale */
+.finale{position:fixed;inset:0;z-index:8;display:grid;place-items:center;
+  padding:calc(env(safe-area-inset-top,0px) + 20px) max(20px,env(safe-area-inset-right,0px)) calc(env(safe-area-inset-bottom,0px) + 20px) max(20px,env(safe-area-inset-left,0px));
+  background:radial-gradient(circle at 50% 45%,rgba(255,200,110,.14),rgba(2,14,24,.6) 72%);animation:fadein .6s ease both}
+@keyframes fadein{from{opacity:0}}
+.fin-card{width:100%;max-width:23rem;text-align:center;border-radius:28px;padding:22px 22px 24px;border:1px solid rgba(243,199,113,.3);background:linear-gradient(160deg,rgba(14,52,76,.78),rgba(3,18,31,.82));-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);box-shadow:0 30px 80px -30px rgba(0,0,0,.8),0 0 60px -20px rgba(245,190,91,.35);animation:cardin .8s cubic-bezier(.2,1.25,.4,1) .1s both}
+@keyframes cardin{from{opacity:0;transform:translateY(30px) scale(.94)}}
+.necklace{width:100%;max-width:260px;height:auto;display:block;margin:0 auto 6px;overflow:visible}
+.thread{stroke-dasharray:420;stroke-dashoffset:420;animation:draw 1.2s ease .35s forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.np{transform-box:fill-box;transform-origin:center;animation:npop .6s cubic-bezier(.3,1.7,.5,1) both}
+@keyframes npop{from{transform:scale(0)}}
+.fin-card h3{font-family:var(--font-display);font-weight:600;font-size:1.75rem;line-height:1.08;letter-spacing:-.015em;margin:10px 0 8px;text-wrap:balance}
+.fin-card p{margin:0 auto;color:var(--mist);font-size:.95rem;line-height:1.5;max-width:30ch}
+.fin-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap;margin-top:18px}
+.solid{display:inline-flex;align-items:center;gap:8px;padding:11px 18px;border-radius:999px;border:0;cursor:pointer;font-weight:600;background:linear-gradient(145deg,var(--gold-hi),#F5B54A 55%,var(--gold-lo));color:var(--ink-on-gold);box-shadow:0 10px 26px -8px rgba(245,170,70,.75);transition:transform .2s}
+.solid:active{transform:scale(.96)}
+
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+@media (max-height:640px){
+  .display{font-size:clamp(2.3rem,10.5vw,3.6rem)}
+  .lede{font-size:.94rem}
+  .display2{font-size:clamp(1.8rem,8vw,2.6rem)}
+  .intro .lede{display:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .bob,.halo,.halo::after,.orb,.core,.swim svg,.tail,.jelly,.bell,.tent,.stalk,.cta::before,.cta-icon::after,.hint .dot::after{animation:none!important}
+  .swim{animation-duration:90s!important}
+}
+</style>
+
+<canvas id="gl" aria-hidden="true"></canvas>
+<div class="fallback" aria-hidden="true"></div>
+
+<div id="sealife" aria-hidden="true">
+  <div class="swim" style="--top:34%;--dur:26s;--delay:-6s"><svg width="58" height="24" viewBox="0 0 60 24"><path d="M2 12C12 2 34 0 46 12 34 24 12 22 2 12Z"/><path class="tail" d="M44 12 58 3 55 12 58 21Z"/></svg></div>
+  <div class="swim r" style="--top:56%;--dur:31s;--delay:-17s;--a:.16"><svg width="80" height="32" viewBox="0 0 60 24"><path d="M2 12C12 2 34 0 46 12 34 24 12 22 2 12Z"/><path class="tail" d="M44 12 58 3 55 12 58 21Z"/></svg></div>
+  <div class="swim" style="--top:20%;--dur:40s;--delay:-24s;--a:.13">
+    <svg width="120" height="44" viewBox="0 0 120 44">
+      <g><path d="M2 10C6 6 13 5 17 10 13 15 6 14 2 10Z"/><path d="M16 10 21 7 20 10 21 13Z"/></g>
+      <g transform="translate(26 14)"><path d="M2 10C6 6 13 5 17 10 13 15 6 14 2 10Z"/><path d="M16 10 21 7 20 10 21 13Z"/></g>
+      <g transform="translate(48 2)"><path d="M2 10C6 6 13 5 17 10 13 15 6 14 2 10Z"/><path d="M16 10 21 7 20 10 21 13Z"/></g>
+      <g transform="translate(60 24)"><path d="M2 10C6 6 13 5 17 10 13 15 6 14 2 10Z"/><path d="M16 10 21 7 20 10 21 13Z"/></g>
+      <g transform="translate(82 10)"><path d="M2 10C6 6 13 5 17 10 13 15 6 14 2 10Z"/><path d="M16 10 21 7 20 10 21 13Z"/></g>
+      <g transform="translate(96 26)"><path d="M2 10C6 6 13 5 17 10 13 15 6 14 2 10Z"/><path d="M16 10 21 7 20 10 21 13Z"/></g>
+    </svg>
+  </div>
+  <div class="jelly">
+    <svg viewBox="0 0 80 120" width="74" height="111">
+      <defs><radialGradient id="jg" cx="50%" cy="30%" r="65%"><stop offset="0" stop-color="#FFE0F4" stop-opacity=".9"/><stop offset=".55" stop-color="#C79BFF" stop-opacity=".45"/><stop offset="1" stop-color="#7FD8FF" stop-opacity=".08"/></radialGradient></defs>
+      <g class="tent" stroke="rgba(225,195,255,.5)" fill="none" stroke-width="1.6" stroke-linecap="round">
+        <path d="M20 42C16 60 26 72 20 96"/><path d="M32 44C28 66 38 80 31 112"/><path d="M47 44C51 66 41 82 48 114"/><path d="M59 42C63 60 55 74 61 94"/>
+      </g>
+      <g class="bell"><path d="M8 40C8 13 72 13 72 40 64 45 56 38 48 43 40 38 32 45 24 40 18 45 12 42 8 40Z" fill="url(#jg)"/><ellipse cx="31" cy="25" rx="8" ry="4" fill="rgba(255,255,255,.35)"/></g>
+    </svg>
+  </div>
+  <svg class="kelp l" viewBox="0 0 120 320" preserveAspectRatio="xMinYMax meet" fill="none" stroke-linecap="round">
+    <g class="stalk"><path d="M30 320C18 250 48 200 30 130 20 90 42 60 34 10" stroke="rgba(8,58,60,.9)" stroke-width="8"/><path d="M30 200c14-10 26-8 34-2M28 120c-12-8-22-6-28 0M36 70c12-8 20-6 26 0" stroke="rgba(14,84,80,.85)" stroke-width="5"/></g>
+    <g class="stalk"><path d="M70 320C80 260 56 220 70 170 80 136 64 110 70 80" stroke="rgba(6,46,52,.9)" stroke-width="7"/><path d="M70 230c12-6 22-4 28 2M68 150c-12-6-20-4-26 2" stroke="rgba(12,72,72,.85)" stroke-width="4.5"/></g>
+    <g class="stalk"><path d="M100 320C94 280 110 250 100 214" stroke="rgba(10,66,64,.9)" stroke-width="6"/></g>
+  </svg>
+  <svg class="kelp r" viewBox="0 0 120 320" preserveAspectRatio="xMinYMax meet" fill="none" stroke-linecap="round">
+    <g class="stalk"><path d="M30 320C20 260 46 210 32 150 24 116 40 88 34 50" stroke="rgba(8,58,60,.9)" stroke-width="8"/><path d="M31 220c14-10 26-8 34-2M30 140c-12-8-22-6-28 0" stroke="rgba(14,84,80,.85)" stroke-width="5"/></g>
+    <g class="stalk"><path d="M74 320C82 270 62 236 74 196" stroke="rgba(6,46,52,.9)" stroke-width="6"/></g>
+  </svg>
+</div>
+
+<!-- ============ SHORE ============ -->
+<section id="shore" class="scene pre" aria-label="The shore">
+  <header class="topbar">
+    <div class="brand rise">
+      <svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><defs><radialGradient id="lg" cx="38%" cy="32%" r="70%"><stop offset="0" stop-color="#FFFDF2"/><stop offset=".45" stop-color="#F6CB79"/><stop offset="1" stop-color="#C47A2E"/></radialGradient></defs><circle cx="16" cy="13" r="8" fill="url(#lg)"/><path d="M3 25c3.2-2.6 6.4-2.6 9.6 0s6.4 2.6 9.6 0 5.4-2.4 6.8-1.2" fill="none" stroke="#9EE6F0" stroke-width="2.2" stroke-linecap="round"/></svg>
+      <span>tidepool<i>.</i></span>
+    </div>
+    <span class="pill rise" style="--d:1">SURFACE · 0 M</span>
+  </header>
+
+  <div class="hint rise" id="hint" style="--d:2"><span class="dot" aria-hidden="true"></span>Touch and drag to stir the sea</div>
+
+  <div class="hero col">
+    <p class="eyebrow wt" data-fill="label">SALT WATER STORIES · SMALL WONDERS</p>
+    <h1 class="display wt" data-fill="ink">Somewhere below, <em data-fill="gold">something glows.</em></h1>
+    <p class="lede wt" data-fill="muted">Five pearls are hiding in a garden under the waves. Stir the water, take a breath, and go find them.</p>
+    <button class="cta rise" id="plunge" style="--d:3">
+      <span><strong>Take the plunge</strong><small>Dive into the pearl garden</small></span>
+      <span class="cta-icon" aria-hidden="true"><svg viewBox="0 0 24 24" width="22" height="22"><path d="M5 12h13M13 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+    </button>
+    <div class="foot rise" style="--d:4" aria-hidden="true"><span>ONE SMALL DIVE</span><i></i><span>FIVE HIDDEN PEARLS</span></div>
+  </div>
+</section>
+
+<!-- ============ DEEP ============ -->
+<section id="deep" class="scene" aria-label="The pearl garden" hidden>
+  <header class="gamebar">
+    <button class="iconbtn rise" id="back" aria-label="Swim back to the shore"><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M19 12H6M11 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
+    <div class="where rise" style="--d:1"><strong>the pearl garden</strong><span>BENEATH · 12 M</span></div>
+    <div class="count rise" id="countBox" style="--d:2" aria-live="polite"><b id="count">0/5</b><span>PEARLS</span></div>
+  </header>
+
+  <div class="intro col">
+    <p class="eyebrow wt" data-fill="label">A TINY OCEAN QUEST</p>
+    <h2 class="display2 wt" data-fill="ink">Follow the <em data-fill="gold">shimmer.</em></h2>
+    <p class="lede wt" data-fill="muted">Tap each glowing bubble to free its pearl. Stir the water and watch the light bend.</p>
+  </div>
+
+  <div class="field col" id="field"></div>
+
+  <div class="panel col rise" style="--d:3">
+    <div class="panel-top">
+      <div>
+        <span class="tag">YOUR OCEAN QUEST</span>
+        <div id="quest"><strong id="questTitle">Find the hidden pearls</strong><small id="questSub">Tap a glowing bubble to free its pearl.</small></div>
+      </div>
+      <button class="ghost" id="reset"><svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M4 12a8 8 0 1 0 2.4-5.7M4 4v4.5h4.5" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>Reset</button>
+    </div>
+    <div class="slots" id="slots" aria-hidden="true"><span class="slot"><i></i></span><span class="slot"><i></i></span><span class="slot"><i></i></span><span class="slot"><i></i></span><span class="slot"><i></i></span></div>
+  </div>
+
+  <div class="finale" id="finale" role="dialog" aria-modal="true" aria-labelledby="finTitle" hidden>
+    <div class="fin-card">
+      <svg class="necklace" viewBox="0 0 300 110" aria-hidden="true">
+        <defs><radialGradient id="pg" cx="35%" cy="30%" r="70%"><stop offset="0" stop-color="#FFFDF2"/><stop offset=".35" stop-color="#FFE3A3"/><stop offset=".7" stop-color="#F2B24E"/><stop offset="1" stop-color="#B9702B"/></radialGradient></defs>
+        <path class="thread" d="M20 20Q150 140 280 20" fill="none" stroke="rgba(255,230,180,.6)" stroke-width="1.5"/>
+        <circle class="np" cx="46" cy="41.6" r="11" fill="url(#pg)" style="animation-delay:.7s"/>
+        <circle class="np" cx="98" cy="70.4" r="12" fill="url(#pg)" style="animation-delay:.82s"/>
+        <circle class="np" cx="150" cy="80" r="14" fill="url(#pg)" style="animation-delay:.94s"/>
+        <circle class="np" cx="202" cy="70.4" r="12" fill="url(#pg)" style="animation-delay:1.06s"/>
+        <circle class="np" cx="254" cy="41.6" r="11" fill="url(#pg)" style="animation-delay:1.18s"/>
+      </svg>
+      <span class="tag">QUEST COMPLETE · 5 OF 5</span>
+      <h3 id="finTitle">The whole garden is glowing.</h3>
+      <p>You found every pearl. Dive again for a new garden, or float back up to the shore.</p>
+      <div class="fin-actions">
+        <button class="solid" id="again">Dive again</button>
+        <button class="ghost" id="surface">Back to the shore</button>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="depth" id="depth" aria-hidden="true"><div><b id="depthNum">0</b>METRES DOWN</div></div>
+
+<script>
+(() => {
+'use strict';
+const $ = s => document.querySelector(s);
+const root = document.documentElement;
+const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
+const canvas = $('#gl');
+const shoreEl = $('#shore'), deepEl = $('#deep');
+const S = { scene: 'shore', depth: 0, textA: 0, glow: 0, found: 0, busy: false, diving: false, lastUser: -1e9, lastIdle: 0, time: 0 };
+
+/* ---------------- text splitting (DOM lays out, canvas paints) ---------------- */
+function splitWords(el) {
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT);
+  const nodes = []; while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(n => {
+    if (!n.nodeValue.trim()) return;
+    const frag = document.createDocumentFragment();
+    n.nodeValue.split(/(\s+)/).forEach(part => {
+      if (!part) return;
+      if (/^\s+$/.test(part)) frag.appendChild(document.createTextNode(part));
+      else { const s = document.createElement('span'); s.className = 'w'; s.textContent = part; frag.appendChild(s); }
+    });
+    n.parentNode.replaceChild(frag, n);
+  });
+}
+document.querySelectorAll('.wt').forEach(splitWords);
+
+/* ---------------- WebGL ---------------- */
+let gl, isGL2 = false, halfType, linearOK = false, fluidOK = false;
+let dpr = Math.min(window.devicePixelRatio || 1, 2);
+const SIM_RES = 128, DYE_RES = innerWidth < 700 ? 256 : 512;
+const FORCE = 4200, RADIUS = 0.22, CURL = 18, VEL_DISS = 1.6, DYE_DISS = 2.2, PRESS_ITERS = 20;
+
+function getGL() {
+  const p = { alpha: false, depth: false, stencil: false, antialias: false, preserveDrawingBuffer: false, powerPreference: 'high-performance' };
+  let g = canvas.getContext('webgl2', p);
+  isGL2 = !!g;
+  if (!g) g = canvas.getContext('webgl', p) || canvas.getContext('experimental-webgl', p);
+  if (!g) return null;
+  if (isGL2) { g.getExtension('EXT_color_buffer_float'); g.getExtension('EXT_color_buffer_half_float'); halfType = g.HALF_FLOAT; linearOK = true; }
+  else { const hf = g.getExtension('OES_texture_half_float'); halfType = hf ? hf.HALF_FLOAT_OES : null; linearOK = !!g.getExtension('OES_texture_half_float_linear'); }
+  return g;
+}
+
+const VS = `precision highp float;
+attribute vec2 aPosition;
+varying vec2 vUv, vL, vR, vT, vB;
+uniform vec2 texelSize;
+void main(){ vUv=aPosition*.5+.5; vL=vUv-vec2(texelSize.x,0.); vR=vUv+vec2(texelSize.x,0.); vT=vUv+vec2(0.,texelSize.y); vB=vUv-vec2(0.,texelSize.y); gl_Position=vec4(aPosition,0.,1.); }`;
+const HEAD = `precision highp float; varying vec2 vUv, vL, vR, vT, vB;\n`;
+const FS = {
+  splat: HEAD + `uniform sampler2D uTarget; uniform float aspectRatio; uniform vec3 color; uniform vec2 point; uniform float radius;
+    void main(){ vec2 p=vUv-point; p.x*=aspectRatio; vec3 s=exp(-dot(p,p)/radius)*color; gl_FragColor=vec4(texture2D(uTarget,vUv).xyz+s,1.); }`,
+  advect: HEAD + `uniform sampler2D uVelocity, uSource; uniform vec2 texelSize; uniform float dt, dissipation;
+    void main(){ vec2 c=vUv-dt*texture2D(uVelocity,vUv).xy*texelSize; gl_FragColor=texture2D(uSource,c)/(1.+dissipation*dt); }`,
+  divergence: HEAD + `uniform sampler2D uVelocity;
+    void main(){ float L=texture2D(uVelocity,vL).x, R=texture2D(uVelocity,vR).x, T=texture2D(uVelocity,vT).y, B=texture2D(uVelocity,vB).y; vec2 C=texture2D(uVelocity,vUv).xy;
+      if(vL.x<0.)L=-C.x; if(vR.x>1.)R=-C.x; if(vT.y>1.)T=-C.y; if(vB.y<0.)B=-C.y; gl_FragColor=vec4(.5*(R-L+T-B),0.,0.,1.); }`,
+  curl: HEAD + `uniform sampler2D uVelocity;
+    void main(){ float L=texture2D(uVelocity,vL).y, R=texture2D(uVelocity,vR).y, T=texture2D(uVelocity,vT).x, B=texture2D(uVelocity,vB).x; gl_FragColor=vec4(.5*(R-L-T+B),0.,0.,1.); }`,
+  vorticity: HEAD + `uniform sampler2D uVelocity, uCurl; uniform float curl, dt;
+    void main(){ float L=texture2D(uCurl,vL).x, R=texture2D(uCurl,vR).x, T=texture2D(uCurl,vT).x, B=texture2D(uCurl,vB).x, C=texture2D(uCurl,vUv).x;
+      vec2 f=.5*vec2(abs(T)-abs(B),abs(R)-abs(L)); f/=length(f)+.0001; f*=curl*C; f.y*=-1.;
+      vec2 v=texture2D(uVelocity,vUv).xy+f*dt; gl_FragColor=vec4(clamp(v,-1000.,1000.),0.,1.); }`,
+  pressure: HEAD + `uniform sampler2D uPressure, uDivergence;
+    void main(){ float L=texture2D(uPressure,vL).x, R=texture2D(uPressure,vR).x, T=texture2D(uPressure,vT).x, B=texture2D(uPressure,vB).x;
+      gl_FragColor=vec4((L+R+B+T-texture2D(uDivergence,vUv).x)*.25,0.,0.,1.); }`,
+  gradient: HEAD + `uniform sampler2D uPressure, uVelocity;
+    void main(){ float L=texture2D(uPressure,vL).x, R=texture2D(uPressure,vR).x, T=texture2D(uPressure,vT).x, B=texture2D(uPressure,vB).x;
+      vec2 v=texture2D(uVelocity,vUv).xy-vec2(R-L,T-B); gl_FragColor=vec4(v,0.,1.); }`,
+  clear: HEAD + `uniform sampler2D uTexture; uniform float value; void main(){ gl_FragColor=value*texture2D(uTexture,vUv); }`,
+  display: HEAD + `
+uniform sampler2D uVel, uDye, uText;
+uniform float uTime, uDepth, uTextA, uAspect, uWarp, uGlow;
+uniform vec2 uRes;
+float hash(vec2 p){ p=fract(p*vec2(123.34,456.21)); p+=dot(p,p+45.32); return fract(p.x*p.y); }
+float noise(vec2 p){ vec2 i=floor(p), f=fract(p); vec2 u=f*f*(3.-2.*f);
+  return mix(mix(hash(i),hash(i+vec2(1.,0.)),u.x), mix(hash(i+vec2(0.,1.)),hash(i+vec2(1.,1.)),u.x), u.y); }
+const mat2 M=mat2(1.6,1.2,-1.2,1.6);
+float fbm(vec2 p){ float v=0., a=.5; for(int i=0;i<5;i++){ v+=a*noise(p); p=M*p; a*=.5; } return v; }
+float fbm3(vec2 p){ float v=0., a=.5; for(int i=0;i<3;i++){ v+=a*noise(p); p=M*p; a*=.5; } return v; }
+
+vec3 shore(vec2 uv){
+  vec2 p=vec2((uv.x-.5)*uAspect, uv.y);
+  float hz=.57;
+  vec2 sun=vec2(.24*max(uAspect,.6), .75);
+  float t=clamp((uv.y-hz)/(1.-hz),0.,1.);
+  vec3 sky=mix(vec3(1.,.73,.55), vec3(.50,.66,.92), smoothstep(0.,.42,t));
+  sky=mix(sky, vec3(.12,.23,.54), smoothstep(.38,1.,t));
+  float sd=length(p-sun);
+  sky+=vec3(1.,.78,.5)*(.006/(sd*sd+.006))*.32;
+  sky+=vec3(1.,.97,.88)*smoothstep(.038,.032,sd);
+  vec2 cq=vec2(p.x*1.6+uTime*.012, uv.y*4.2);
+  float cn=fbm(cq+fbm3(cq*1.7+uTime*.02)*.6);
+  float band=smoothstep(hz+.03,hz+.17,uv.y)*smoothstep(1.06,.78,uv.y);
+  float cm=smoothstep(.5,.78,cn)*band;
+  float lit=clamp(fbm3(cq*2.3+vec2(.3,-.2))*1.5-.25,0.,1.);
+  vec3 cloud=mix(vec3(.74,.66,.80), vec3(1.,.96,.92), lit);
+  cloud+=vec3(1.,.78,.5)*(.025/(sd+.05))*.3;
+  sky=mix(sky, cloud, cm*.92);
+  vec3 col=sky;
+  if(uv.y<hz){
+    float dd=hz-uv.y;
+    float z=1./(dd+.012);
+    vec2 q=vec2(p.x*z*.35, z*.9+uTime*.5);
+    float w=fbm3(q*vec2(1.,.45)+vec2(uTime*.05,0.));
+    float w2=noise(q*vec2(3.,1.2)-vec2(0.,uTime*.8));
+    vec3 sea=mix(vec3(.03,.27,.40), vec3(.55,.70,.80), exp(-dd*10.));
+    sea*=.8+.38*w;
+    sea+=vec3(.15,.35,.4)*w2*.15*smoothstep(0.,.3,dd);
+    float gx=p.x-sun.x;
+    float glit=exp(-gx*gx/(.0015+dd*dd*.6));
+    float spark=pow(noise(q*vec2(5.,2.)+vec2(uTime*.7,0.)),6.)*6.;
+    sea+=vec3(1.,.82,.55)*glit*(.32+spark);
+    sea+=vec3(.9,.97,1.)*pow(noise(q*vec2(9.,3.5)-uTime*.4),14.)*1.4*smoothstep(0.,.25,dd);
+    col=sea;
+  }
+  float ix=p.x+.2*max(uAspect,.6);
+  float ih=hz+.03*exp(-ix*ix/.005)+.014*exp(-(ix-.07)*(ix-.07)/.003);
+  if(uv.y>hz && uv.y<ih) col=mix(col, vec3(.30,.34,.52), .85);
+  col+=vec3(1.,.8,.6)*exp(-abs(uv.y-hz)*60.)*.22;
+  float sh=.075+.02*sin(uTime*.7)+.012*sin(p.x*7.+uTime*1.3);
+  float foam=smoothstep(.012,0.,abs(uv.y-sh))*(.6+.4*noise(vec2(p.x*30.,uTime)));
+  if(uv.y<sh) col=mix(col, vec3(.85,.72,.55)*.75, .6);
+  col+=foam*.6;
+  col=mix(col, vec3(.02,.07,.14), smoothstep(.62,0.,uv.y)*.7);
+  col=mix(col, vec3(.04,.10,.22), smoothstep(.86,1.,uv.y)*.35);
+  return col;
+}
+float caustic(vec2 uv){
+  vec2 p=mod(uv*6.2831,6.2831)-250.;
+  vec2 i=p; float c=1., inten=.005;
+  for(int n=0;n<4;n++){ float t=uTime*.3*(1.-(3.5/float(n+1)));
+    i=p+vec2(cos(t-i.x)+sin(t+i.y), sin(t-i.y)+cos(t+i.x));
+    c+=1./length(vec2(p.x/(sin(i.x+t)/inten), p.y/(cos(i.y+t)/inten))); }
+  c/=4.; c=1.17-pow(c,1.4); return pow(abs(c),8.);
+}
+float bubbles(vec2 p){
+  float b=0.;
+  for(int k=0;k<3;k++){
+    float fk=float(k);
+    vec2 q=p*(7.+fk*6.); q.y-=uTime*(1.1+.6*fk); q.x+=sin(q.y*.6+fk*2.)*.25;
+    vec2 id=floor(q), f=fract(q)-.5;
+    if(hash(id+fk*17.)>.86){
+      vec2 c=vec2(hash(id+3.1)-.5, hash(id+7.7)-.5)*.4;
+      float r=.07+.12*hash(id+11.3);
+      float d=length(f-c);
+      float ring=smoothstep(.035,0.,abs(d-r));
+      float spec=smoothstep(r*.35,0.,length(f-c-vec2(-.35,.35)*r));
+      b+=(ring*.5+spec*.9+smoothstep(r,0.,d)*.07)*(1.-fk*.25);
+    }
+  }
+  return b;
+}
+vec3 under(vec2 uv){
+  vec2 p=vec2((uv.x-.5)*uAspect, uv.y);
+  vec3 col=mix(vec3(.008,.05,.11), vec3(.03,.26,.38), smoothstep(0.,.62,uv.y));
+  col=mix(col, vec3(.16,.60,.68), smoothstep(.55,1.05,uv.y));
+  float sv=fbm3(vec2(p.x*5.+uTime*.25, uTime*.18+p.x));
+  col+=vec3(.55,.95,1.)*smoothstep(.86,1.,uv.y)*(.16+.35*sv);
+  vec2 d=p-vec2(.15*sin(uTime*.07), 1.35);
+  float ang=atan(d.x,-d.y);
+  float rays=smoothstep(.42,.9,fbm3(vec2(ang*9.+uTime*.04, uTime*.06)))*(.6+.4*noise(vec2(ang*23.-uTime*.05,2.)));
+  col+=vec3(.45,.88,.95)*rays*.3*smoothstep(-.1,1.,uv.y)*(1.+uGlow*1.5);
+  float c=caustic(p*.9+vec2(0.,uTime*.01));
+  col+=vec3(.35,.85,.95)*c*(.05+.3*smoothstep(.35,0.,uv.y));
+  float reef=.2+.07*fbm3(vec2(p.x*3.+4.,1.));
+  col=mix(col, vec3(.02,.13,.20), smoothstep(reef+.008,reef-.008,uv.y)*.45);
+  float floorY=.12+.05*fbm3(vec2(p.x*1.8,3.));
+  vec3 sand=vec3(.05,.14,.18)+vec3(.25,.6,.62)*c*.5+vec3(.03,.05,.05)*noise(p*40.);
+  col=mix(col, sand, smoothstep(floorY+.01,floorY-.01,uv.y));
+  col+=pow(noise(p*60.+vec2(0.,uTime*.6)),18.)*.8;
+  col+=vec3(.75,.95,1.)*bubbles(p);
+  col+=vec3(1.,.75,.35)*uGlow*.3*exp(-length(p-vec2(0.,.5))*2.);
+  return col;
+}
+void main(){
+  vec2 vel=texture2D(uVel,vUv).xy;
+  vec3 dye=min(texture2D(uDye,vUv).rgb, vec3(.45));
+  vec2 off=vel*uWarp;
+  float ol=length(off);
+  if(ol>.14){ off*=.14/ol; ol=.14; }
+  vec2 uv=vUv-off;
+  vec3 col;
+  float L=mix(-.12,1.18,uDepth);
+  float wl=L+.018*sin(uv.x*13.+uTime*3.)+.009*sin(uv.x*29.-uTime*4.7);
+  if(uDepth<.001) col=shore(uv);
+  else if(uDepth>.999) col=under(uv);
+  else {
+    float m=smoothstep(wl+.006,wl-.006,uv.y);
+    col=mix(shore(uv), under(uv), m);
+    col+=vec3(.8,.97,1.)*exp(-abs(uv.y-wl)*90.)*.75;
+    col+=vec3(.6,.9,1.)*bubbles(vec2((uv.x-.5)*uAspect,uv.y)*.7+vec2(0.,uTime*.4))*m*.9;
+  }
+  vec2 dir=off/(ol+1e-5);
+  float ca=clamp(ol*8.,0.,1.)*.007;
+  vec4 tg=texture2D(uText,uv);
+  float tr=texture2D(uText,uv+dir*ca).a, tb=texture2D(uText,uv-dir*ca).a;
+  vec3 ta=vec3(tr,tg.a,tb)*uTextA;
+  col=col*(1.-ta)+tg.rgb*ta;
+  col+=vec3(.55,.85,1.)*smoothstep(.004,.05,ol)*.10;
+  col+=dye*.55;
+  vec2 vq=vUv-.5; col*=1.-dot(vq*vec2(uAspect>1.?.8:1.2,1.),vq)*.55;
+  col+=(hash(vUv*uRes+fract(uTime)*100.)-.5)*.025;
+  gl_FragColor=vec4(col,1.);
+}`
+};
+
+let progs = {}, vel, dye, pressure, divF, curlF, textTex, blank;
+function compile(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+let vsObj;
+function program(fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, vsObj); gl.attachShader(p, compile(gl.FRAGMENT_SHADER, fs));
+  gl.bindAttribLocation(p, 0, 'aPosition'); gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}; const n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name); }
+  return { u, bind() { gl.useProgram(p); } };
+}
+function fbo(w, h, filter) {
+  gl.activeTexture(gl.TEXTURE0);
+  const tex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filter); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filter);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, isGL2 ? gl.RGBA16F : gl.RGBA, w, h, 0, gl.RGBA, halfType, null);
+  const fb = gl.createFramebuffer(); gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  const ok = gl.checkFramebufferStatus(gl.FRAMEBUFFER) === gl.FRAMEBUFFER_COMPLETE;
+  gl.viewport(0, 0, w, h); gl.clearColor(0, 0, 0, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+  return { tex, fb, w, h, tx: 1 / w, ty: 1 / h, ok, attach(id) { gl.activeTexture(gl.TEXTURE0 + id); gl.bindTexture(gl.TEXTURE_2D, tex); return id; } };
+}
+function dbl(w, h, filter) {
+  let a = fbo(w, h, filter), b = fbo(w, h, filter);
+  return { w, h, tx: 1 / w, ty: 1 / h, ok: a.ok && b.ok, get read() { return a; }, get write() { return b; }, swap() { const t = a; a = b; b = t; } };
+}
+function res(r) {
+  let a = canvas.width / canvas.height; if (a < 1) a = 1 / a;
+  const mn = r, mx = Math.round(r * a);
+  return canvas.width > canvas.height ? { w: mx, h: mn } : { w: mn, h: mx };
+}
+let simKey = '';
+function initFBOs() {
+  const s = res(SIM_RES), d = res(DYE_RES);
+  const key = s.w + 'x' + s.h;
+  if (key === simKey) return; simKey = key;
+  const L = linearOK ? gl.LINEAR : gl.NEAREST;
+  vel = dbl(s.w, s.h, L); dye = dbl(d.w, d.h, L); pressure = dbl(s.w, s.h, gl.NEAREST);
+  divF = fbo(s.w, s.h, gl.NEAREST); curlF = fbo(s.w, s.h, gl.NEAREST);
+  fluidOK = vel.ok && dye.ok && pressure.ok && divF.ok && curlF.ok;
+}
+function blit(t) {
+  if (t) { gl.viewport(0, 0, t.w, t.h); gl.bindFramebuffer(gl.FRAMEBUFFER, t.fb); }
+  else { gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight); gl.bindFramebuffer(gl.FRAMEBUFFER, null); }
+  gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+}
+function texFromCanvasInit() {
+  textTex = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, textTex);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+  blank = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, blank);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+}
+function initGL() {
+  try {
+    gl = getGL(); if (!gl) return false;
+    vsObj = compile(gl.VERTEX_SHADER, VS);
+    for (const k in FS) progs[k] = program(FS[k]);
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, -1, 1, 1, 1, 1, -1]), gl.STATIC_DRAW);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 0, 2, 3]), gl.STATIC_DRAW);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0); gl.enableVertexAttribArray(0);
+    texFromCanvasInit();
+    sizeCanvas();
+    if (halfType) initFBOs();
+    return true;
+  } catch (e) { console.warn('WebGL unavailable:', e); return false; }
+}
+function sizeCanvas() {
+  const w = Math.round(innerWidth * dpr), h = Math.round(innerHeight * dpr);
+  if (canvas.width !== w || canvas.height !== h) { canvas.width = w; canvas.height = h; }
+}
+
+/* ---------------- fluid step ---------------- */
+function step(dt) {
+  const P = progs;
+  gl.disable(gl.BLEND);
+  P.curl.bind(); gl.uniform2f(P.curl.u.texelSize, vel.tx, vel.ty); gl.uniform1i(P.curl.u.uVelocity, vel.read.attach(0)); blit(curlF);
+  P.vorticity.bind(); gl.uniform2f(P.vorticity.u.texelSize, vel.tx, vel.ty);
+  gl.uniform1i(P.vorticity.u.uVelocity, vel.read.attach(0)); gl.uniform1i(P.vorticity.u.uCurl, curlF.attach(1));
+  gl.uniform1f(P.vorticity.u.curl, CURL); gl.uniform1f(P.vorticity.u.dt, dt); blit(vel.write); vel.swap();
+  P.divergence.bind(); gl.uniform2f(P.divergence.u.texelSize, vel.tx, vel.ty); gl.uniform1i(P.divergence.u.uVelocity, vel.read.attach(0)); blit(divF);
+  P.clear.bind(); gl.uniform1i(P.clear.u.uTexture, pressure.read.attach(0)); gl.uniform1f(P.clear.u.value, 0.8); blit(pressure.write); pressure.swap();
+  P.pressure.bind(); gl.uniform2f(P.pressure.u.texelSize, vel.tx, vel.ty); gl.uniform1i(P.pressure.u.uDivergence, divF.attach(0));
+  for (let i = 0; i < PRESS_ITERS; i++) { gl.uniform1i(P.pressure.u.uPressure, pressure.read.attach(1)); blit(pressure.write); pressure.swap(); }
+  P.gradient.bind(); gl.uniform2f(P.gradient.u.texelSize, vel.tx, vel.ty);
+  gl.uniform1i(P.gradient.u.uPressure, pressure.read.attach(0)); gl.uniform1i(P.gradient.u.uVelocity, vel.read.attach(1)); blit(vel.write); vel.swap();
+  P.advect.bind(); gl.uniform2f(P.advect.u.texelSize, vel.tx, vel.ty);
+  let id = vel.read.attach(0); gl.uniform1i(P.advect.u.uVelocity, id); gl.uniform1i(P.advect.u.uSource, id);
+  gl.uniform1f(P.advect.u.dt, dt); gl.uniform1f(P.advect.u.dissipation, VEL_DISS); blit(vel.write); vel.swap();
+  gl.uniform1i(P.advect.u.uVelocity, vel.read.attach(0)); gl.uniform1i(P.advect.u.uSource, dye.read.attach(1));
+  gl.uniform1f(P.advect.u.dissipation, DYE_DISS); blit(dye.write); dye.swap();
+}
+function splat(x, y, dx, dy, c, rMul = 1) {
+  if (!fluidOK) return;
+  const P = progs.splat, a = canvas.width / canvas.height;
+  let r = RADIUS * rMul / 100; if (a > 1) r *= a;
+  P.bind();
+  gl.uniform1i(P.u.uTarget, vel.read.attach(0)); gl.uniform1f(P.u.aspectRatio, a);
+  gl.uniform2f(P.u.point, x, y); gl.uniform3f(P.u.color, dx, dy, 0); gl.uniform1f(P.u.radius, r);
+  blit(vel.write); vel.swap();
+  gl.uniform1i(P.u.uTarget, dye.read.attach(0)); gl.uniform3f(P.u.color, c[0], c[1], c[2]); blit(dye.write); dye.swap();
+}
+const PALETTE = [[0.02, 0.15, 0.17], [0.17, 0.11, 0.03], [0.07, 0.09, 0.19], [0.03, 0.16, 0.12]];
+const pick = () => PALETTE[(Math.random() * PALETTE.length) | 0];
+function aspectDelta(dx, dy) { const a = canvas.width / canvas.height; if (a < 1) dx *= a; if (a > 1) dy /= a; return [dx, dy]; }
+
+function render() {
+  const D = progs.display;
+  D.bind();
+  gl.uniform1i(D.u.uVel, 0); gl.uniform1i(D.u.uDye, 1); gl.uniform1i(D.u.uText, 2);
+  if (fluidOK) { vel.read.attach(0); dye.read.attach(1); }
+  else { gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, blank); gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, blank); }
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, textTex);
+  gl.uniform1f(D.u.uTime, S.time); gl.uniform1f(D.u.uDepth, S.depth); gl.uniform1f(D.u.uTextA, S.textA);
+  gl.uniform1f(D.u.uAspect, canvas.width / canvas.height); gl.uniform1f(D.u.uWarp, reduce ? 0.00015 : 0.0004);
+  gl.uniform1f(D.u.uGlow, S.glow); gl.uniform2f(D.u.uRes, canvas.width, canvas.height);
+  blit(null);
+}
+
+/* ---------------- text → texture ---------------- */
+const tcv = document.createElement('canvas');
+const tctx = tcv.getContext('2d');
+function fillFor(kind, x, y, w, h) {
+  if (kind === 'gold') { const g = tctx.createLinearGradient(x, y, x + w * .35, y + h); g.addColorStop(0, '#FFEFC2'); g.addColorStop(.5, '#F7C35F'); g.addColorStop(1, '#E9883E'); return g; }
+  if (kind === 'label') return '#F3C771';
+  if (kind === 'muted') return 'rgba(218,238,246,.9)';
+  return '#F3FAFC';
+}
+function drawText() {
+  if (!gl) return;
+  tcv.width = canvas.width; tcv.height = canvas.height;
+  const k = canvas.width / innerWidth;
+  tctx.clearRect(0, 0, tcv.width, tcv.height);
+  const sceneEl = S.scene === 'shore' ? shoreEl : deepEl;
+  sceneEl.querySelectorAll('.wt .w').forEach(sp => {
+    const r = sp.getBoundingClientRect(); if (!r.width) return;
+    const cs = getComputedStyle(sp);
+    const fs = parseFloat(cs.fontSize) * k;
+    tctx.font = `${cs.fontStyle} ${cs.fontWeight} ${fs}px ${cs.fontFamily}`;
+    if ('letterSpacing' in tctx) tctx.letterSpacing = ((parseFloat(cs.letterSpacing) || 0) * k) + 'px';
+    const m = tctx.measureText(sp.textContent);
+    const fa = m.fontBoundingBoxAscent ?? fs * .8, fd = m.fontBoundingBoxDescent ?? fs * .22;
+    const x = r.left * k, top = r.top * k, h = r.height * k;
+    const y = top + (h - (fa + fd)) / 2 + fa;
+    const kind = sp.closest('[data-fill]').dataset.fill;
+    tctx.fillStyle = fillFor(kind, x, top, r.width * k, h);
+    if (kind === 'gold') { tctx.shadowColor = 'rgba(255,170,70,.45)'; tctx.shadowBlur = 26 * k; }
+    else if (kind === 'ink') { tctx.shadowColor = 'rgba(0,14,30,.45)'; tctx.shadowBlur = 20 * k; }
+    else { tctx.shadowColor = 'rgba(0,12,24,.55)'; tctx.shadowBlur = 8 * k; }
+    tctx.textBaseline = 'alphabetic';
+    tctx.fillText(sp.textContent, x, y);
+  });
+  gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, textTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, tcv);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+}
+
+/* ---------------- input ---------------- */
+const pointers = new Map();
+function ptr(e) {
+  let p = pointers.get(e.pointerId);
+  if (!p) { p = { x: 0, y: 0, dx: 0, dy: 0, moved: false, down: false, init: false, mouse: e.pointerType === 'mouse', color: pick() }; pointers.set(e.pointerId, p); }
+  return p;
+}
+function userActive() { S.lastUser = performance.now(); hideHint(); }
+addEventListener('pointerdown', e => {
+  const p = ptr(e); p.down = true; p.init = true; p.color = pick();
+  p.x = e.clientX / innerWidth; p.y = 1 - e.clientY / innerHeight; userActive();
+}, { passive: true });
+addEventListener('pointermove', e => {
+  const p = ptr(e); const x = e.clientX / innerWidth, y = 1 - e.clientY / innerHeight;
+  if (p.init) { p.dx += x - p.x; p.dy += y - p.y; p.moved = true; }
+  p.x = x; p.y = y; p.init = true;
+  if (p.down || p.mouse) S.lastUser = performance.now();
+  if (p.down) hideHint();
+}, { passive: true });
+const up = e => { const p = pointers.get(e.pointerId); if (!p) return; p.down = false; if (!p.mouse) pointers.delete(e.pointerId); };
+addEventListener('pointerup', up); addEventListener('pointercancel', up);
+
+function applyPointers() {
+  pointers.forEach(p => {
+    if (!p.moved) return; p.moved = false;
+    if (!(p.down || p.mouse)) { p.dx = p.dy = 0; return; }
+    const k = p.down ? 1 : .45;
+    const [dx, dy] = aspectDelta(p.dx, p.dy); p.dx = p.dy = 0;
+    splat(p.x, p.y, dx * FORCE * k, dy * FORCE * k, p.color.map(c => c * k));
+  });
+}
+
+/* scripted "ghost" strokes: intro sweep, idle breaths, bursts */
+const ghosts = [];
+function ghost(path, dur, force = 1, color = pick(), rMul = 1) { ghosts.push({ path, dur, force, color, rMul, t: 0, prev: null }); }
+function runGhosts(dt) {
+  for (let i = ghosts.length - 1; i >= 0; i--) {
+    const g = ghosts[i]; g.t += dt;
+    const u = Math.min(g.t / g.dur, 1), e = u < .5 ? 2 * u * u : 1 - Math.pow(-2 * u + 2, 2) / 2;
+    const pos = g.path(e);
+    if (g.prev) { const [dx, dy] = aspectDelta(pos[0] - g.prev[0], pos[1] - g.prev[1]); splat(pos[0], pos[1], dx * FORCE * g.force, dy * FORCE * g.force, g.color, g.rMul); }
+    g.prev = pos; if (u >= 1) ghosts.splice(i, 1);
+  }
+}
+function introSweep() {
+  if (reduce || !fluidOK) return;
+  const h = shoreEl.querySelector('h1').getBoundingClientRect();
+  const yc = 1 - (h.top + h.height * .55) / innerHeight;
+  const x0 = Math.max(0.02, (h.left - 20) / innerWidth), x1 = Math.min(0.98, (h.right + 30) / innerWidth);
+  ghost(u => [x0 + (x1 - x0) * u, yc + 0.05 * Math.sin(u * Math.PI * 2.2)], 1.25, 0.9, [0.05, 0.16, 0.18]);
+}
+function idleBreath(now) {
+  if (reduce || !fluidOK || S.busy) return;
+  if (now - S.lastUser < 4200 || now - S.lastIdle < 5200) return;
+  S.lastIdle = now;
+  const x = .2 + Math.random() * .6, y = .25 + Math.random() * .55, r = .08 + Math.random() * .06, a0 = Math.random() * 6.28, dir = Math.random() < .5 ? 1 : -1;
+  ghost(u => [x + Math.cos(a0 + dir * u * 3.6) * r, y + Math.sin(a0 + dir * u * 3.6) * r * .7], 1.3, .35);
+}
+function burst(x, y, n = 10, power = 340, color = [0.20, 0.13, 0.03]) {
+  for (let i = 0; i < n; i++) {
+    const a = i / n * Math.PI * 2 + Math.random() * .3;
+    splat(x + Math.cos(a) * .012, y + Math.sin(a) * .012, Math.cos(a) * power, Math.sin(a) * power, color.map(c => c * .5), .55);
+  }
+}
+
+/* ---------------- loop ---------------- */
+let last = performance.now(), frames = 0, slow = 0, bubbleClock = 0;
+function frame(now) {
+  const dt = Math.min((now - last) / 1000, 1 / 30); last = now; S.time += dt;
+  if (fluidOK) {
+    applyPointers(); runGhosts(dt); idleBreath(now);
+    if (S.diving) {
+      bubbleClock += dt;
+      while (bubbleClock > .09) {
+        bubbleClock -= .09;
+        const L = -.12 + 1.3 * S.depth;
+        splat(Math.random(), Math.max(0.02, Math.min(.98, L - .05 - Math.random() * .15)), (Math.random() - .5) * 140, 240 + Math.random() * 240, [0.03, 0.12, 0.15], .6);
+      }
+    }
+    step(dt);
+  }
+  render();
+  if (frames < 120) {
+    frames++; if (dt > 0.028) slow++;
+    if (frames === 120 && slow > 70 && dpr > 1.1) { dpr = Math.max(1, dpr * .66); sizeCanvas(); simKey = ''; initFBOs(); drawText(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+/* ---------------- helpers ---------------- */
+const easeIO = u => u < .5 ? 4 * u * u * u : 1 - Math.pow(-2 * u + 2, 3) / 2;
+function tween(ms, fn, ease = easeIO) {
+  return new Promise(res => {
+    const t0 = performance.now();
+    const tick = now => { const u = Math.min((now - t0) / ms, 1); fn(ease(u)); u < 1 ? requestAnimationFrame(tick) : res(); };
+    requestAnimationFrame(tick);
+  });
+}
+const nextFrame = () => new Promise(r => requestAnimationFrame(() => r()));
+const wait = ms => new Promise(r => setTimeout(r, ms));
+function setScene(name) { S.scene = name; root.dataset.scene = name; }
+let hintGone = false;
+function hideHint() { if (hintGone) return; hintGone = true; $('#hint').classList.add('gone'); }
+function buzz(ms) { try { navigator.vibrate && navigator.vibrate(ms); } catch (e) {} }
+
+/* ---------------- scenes ---------------- */
+async function dive() {
+  if (S.busy) return; S.busy = true; hideHint();
+  shoreEl.classList.add('out');
+  tween(380, v => S.textA = 1 - v);
+  const depthEl = $('#depth'), num = $('#depthNum');
+  await wait(200);
+  depthEl.classList.add('on'); S.diving = true;
+  if (fluidOK) burst(.5, .12, 14, 520, [0.04, 0.16, 0.2]);
+  await tween(reduce ? 700 : 2000, v => { S.depth = v; num.textContent = Math.round(v * 12); });
+  S.diving = false; depthEl.classList.remove('on');
+  shoreEl.hidden = true; shoreEl.classList.remove('out');
+  deepEl.classList.add('pre'); deepEl.hidden = false; setScene('deep');
+  $('#sealife').classList.add('on');
+  await nextFrame(); await nextFrame();
+  drawText(); deepEl.classList.remove('pre');
+  buildPearls(S.firstDone ? randomSpots() : SPOTS); S.firstDone = true;
+  await tween(700, v => S.textA = v);
+  S.busy = false;
+}
+async function surface() {
+  if (S.busy) return; S.busy = true;
+  const fin = $('#finale'); if (!fin.hidden) fin.hidden = true;
+  deepEl.classList.add('out'); $('#sealife').classList.remove('on');
+  tween(380, v => { S.textA = 1 - v; S.glow = Math.min(S.glow, 1 - v); });
+  const depthEl = $('#depth'), num = $('#depthNum');
+  await wait(200); depthEl.classList.add('on');
+  if (fluidOK) burst(.5, .85, 12, 420, [0.04, 0.14, 0.18]);
+  await tween(reduce ? 700 : 1800, v => { S.depth = 1 - v; num.textContent = Math.round((1 - v) * 12); });
+  depthEl.classList.remove('on');
+  deepEl.hidden = true; deepEl.classList.remove('out');
+  resetGame(false);
+  shoreEl.classList.add('pre'); shoreEl.hidden = false; setScene('shore');
+  await nextFrame(); await nextFrame();
+  drawText(); shoreEl.classList.remove('pre');
+  await tween(700, v => S.textA = v);
+  S.busy = false;
+}
+
+/* ---------------- pearl game ---------------- */
+const SPOTS = [[20, 22], [76, 14], [48, 48], [17, 80], [80, 74]];
+const QUEST = [
+  ['Find the hidden pearls', 'Tap a glowing bubble to free its pearl.'],
+  ['One pearl found', 'Four more are glowing somewhere in the deep.'],
+  ['Two pearls found', 'Three left. Check near the kelp.'],
+  ['Three pearls found', 'Two to go. The shimmer is getting brighter.'],
+  ['Keep following the glow', 'One more pearl is waiting in the deep.'],
+  ['Every pearl is yours', 'The whole garden is glowing.']
+];
+const field = $('#field'), slots = [...document.querySelectorAll('.slot')];
+function randomSpots() {
+  const out = []; let guard = 0;
+  while (out.length < 5 && guard++ < 400) {
+    const p = [12 + Math.random() * 76, 10 + Math.random() * 78];
+    if (out.every(q => Math.hypot(q[0] - p[0], (q[1] - p[1]) * 1.3) > 26)) out.push(p);
+  }
+  while (out.length < 5) out.push(SPOTS[out.length]);
+  return out;
+}
+function buildPearls(spots) {
+  field.innerHTML = '';
+  spots.forEach(([x, y], i) => {
+    const b = document.createElement('button');
+    b.className = 'pearl grow'; b.style.cssText = `--x:${x}%;--y:${y}%;--i:${i}`;
+    b.setAttribute('aria-label', `Collect pearl ${i + 1}`);
+    b.innerHTML = '<span class="bob"><span class="halo"></span><span class="orb"><span class="core"></span></span></span>';
+    b.addEventListener('click', () => collect(b));
+    field.appendChild(b);
+  });
+}
+function setQuest(n) {
+  $('#questTitle').textContent = QUEST[n][0]; $('#questSub').textContent = QUEST[n][1];
+  $('#quest').animate([{ opacity: 0, transform: 'translateY(6px)' }, { opacity: 1, transform: 'none' }], { duration: 420, easing: 'ease-out' });
+}
+function setCount(n) {
+  $('#count').textContent = `${n}/5`;
+  const box = $('#countBox'); box.classList.remove('bump'); void box.offsetWidth; box.classList.add('bump');
+}
+function spawn(cls, x, y, size) { const d = document.createElement('div'); d.className = 'fx ' + cls; d.style.transform = `translate(${x - size / 2}px,${y - size / 2}px)`; document.body.appendChild(d); return d; }
+function popFx(x, y) {
+  const r = spawn('ring', x, y, 24);
+  r.animate([{ transform: `translate(${x - 12}px,${y - 12}px) scale(1)`, opacity: 1 }, { transform: `translate(${x - 12}px,${y - 12}px) scale(5)`, opacity: 0 }], { duration: 650, easing: 'cubic-bezier(.2,.8,.3,1)' }).onfinish = () => r.remove();
+  for (let i = 0; i < 12; i++) {
+    const a = i / 12 * Math.PI * 2 + Math.random() * .4, dist = 40 + Math.random() * 46;
+    const d = spawn('drop', x, y, 7);
+    d.animate([
+      { transform: `translate(${x - 3.5}px,${y - 3.5}px) scale(1)`, opacity: 1 },
+      { transform: `translate(${x - 3.5 + Math.cos(a) * dist}px,${y - 3.5 + Math.sin(a) * dist - 18}px) scale(.3)`, opacity: 0 }
+    ], { duration: 650 + Math.random() * 300, easing: 'cubic-bezier(.15,.7,.3,1)' }).onfinish = () => d.remove();
+  }
+}
+function fly(x0, y0, x1, y1) {
+  const cx = (x0 + x1) / 2 + (x0 < x1 ? -70 : 70), cy = Math.min(y0, y1) - 150;
+  const kf = []; const N = 18;
+  for (let i = 0; i <= N; i++) {
+    const t = easeIO(i / N), it = 1 - t;
+    const x = it * it * x0 + 2 * it * t * cx + t * t * x1, y = it * it * y0 + 2 * it * t * cy + t * t * y1;
+    const s = 1 + Math.sin(t * Math.PI) * .45 - t * .4;
+    kf.push({ transform: `translate(${x - 13}px,${y - 13}px) scale(${s})` });
+  }
+  const dur = reduce ? 400 : 950;
+  [1, 2, 3].forEach(j => {
+    const tr = spawn('trail', x0, y0, 12);
+    const tk = kf.map(f => ({ transform: f.transform.replace(/translate\(([-\d.]+)px,([-\d.]+)px\)/, (m, a, b) => `translate(${+a + 7}px,${+b + 7}px)`) }));
+    tr.animate(tk, { duration: dur, delay: j * 55, fill: 'both' }).onfinish = () => tr.remove();
+    tr.style.opacity = String(.75 - j * .2);
+  });
+  const f = spawn('flyer', x0, y0, 26);
+  return new Promise(res => { f.animate(kf, { duration: dur, fill: 'forwards' }).onfinish = () => { f.remove(); res(); }; });
+}
+function collect(btn) {
+  if (btn.classList.contains('taken') || S.found >= 5 || S.busy) return;
+  btn.classList.add('taken'); btn.disabled = true;
+  const r = btn.querySelector('.core').getBoundingClientRect();
+  const x = r.left + r.width / 2, y = r.top + r.height / 2;
+  popFx(x, y); buzz(12);
+  if (fluidOK) burst(x / innerWidth, 1 - y / innerHeight, 10, 260);
+  const n = ++S.found, slot = slots[n - 1];
+  setQuest(n);
+  const sr = slot.getBoundingClientRect();
+  fly(x, y, sr.left + sr.width / 2, sr.top + sr.height / 2).then(() => {
+    slot.classList.add('filled'); setCount(n);
+    if (fluidOK) burst(sr.left / innerWidth + .02, 1 - sr.top / innerHeight, 6, 200);
+    if (n === 5) finale();
+  });
+}
+async function finale() {
+  buzz([10, 40, 10]);
+  tween(1400, v => S.glow = v);
+  if (fluidOK) for (let i = 0; i < 5; i++) setTimeout(() => burst(.15 + Math.random() * .7, .3 + Math.random() * .5, 10, 340), i * 160);
+  await wait(500);
+  const fin = $('#finale'); fin.hidden = false;
+  fin.querySelectorAll('.thread,.np').forEach(el => { el.style.animation = 'none'; void el.getBoundingClientRect(); el.style.animation = ''; });
+  $('#again').focus({ preventScroll: true });
+}
+function resetGame(rebuild = true, fresh = false) {
+  S.found = 0; slots.forEach(s => s.classList.remove('filled'));
+  $('#count').textContent = '0/5';
+  $('#questTitle').textContent = QUEST[0][0]; $('#questSub').textContent = QUEST[0][1];
+  if (rebuild) buildPearls(fresh ? randomSpots() : SPOTS);
+}
+$('#plunge').addEventListener('click', dive);
+$('#back').addEventListener('click', surface);
+$('#surface').addEventListener('click', surface);
+$('#reset').addEventListener('click', () => {
+  if (S.busy) return;
+  resetGame(true, true); setQuest(0);
+  if (fluidOK) ghost(u => [.1 + .8 * u, .45 + .1 * Math.sin(u * 7)], 1, .7);
+});
+$('#again').addEventListener('click', () => {
+  $('#finale').hidden = true;
+  tween(900, v => S.glow = 1 - v);
+  resetGame(true, true); setQuest(0);
+  if (fluidOK) burst(.5, .5, 16, 600, [0.04, 0.15, 0.18]);
+});
+addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#finale').hidden) $('#again').click(); });
+
+/* ---------------- boot ---------------- */
+setScene('shore');
+let rt;
+addEventListener('resize', () => {
+  clearTimeout(rt);
+  rt = setTimeout(() => { if (!gl) return; sizeCanvas(); if (halfType) initFBOs(); drawText(); }, 120);
+});
+const glOK = initGL();
+if (glOK) { root.classList.add('gl-text'); requestAnimationFrame(frame); }
+else root.classList.add('no-gl');
+
+let booted = false;
+function boot() {
+  if (booted) return; booted = true;
+  drawText(); shoreEl.classList.remove('pre');
+  if (glOK) tween(1100, v => S.textA = v);
+  setTimeout(introSweep, 650);
+}
+(document.fonts && document.fonts.ready ? document.fonts.ready : Promise.resolve()).then(() => nextFrame()).then(boot);
+setTimeout(boot, 2500);
+if (document.fonts) document.fonts.addEventListener && document.fonts.addEventListener('loadingdone', () => { if (booted) drawText(); });
+})();
+</script>
