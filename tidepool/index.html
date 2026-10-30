@@ -471,6 +471,17 @@ float bubbles(vec2 p){
   }
   return b;
 }
+float snow(vec2 p){
+  float s=0.;
+  for(int k=0;k<2;k++){
+    float fk=float(k);
+    vec2 q=p*(22.+fk*14.)+vec2(sin(p.y*3.+fk)*.3, uTime*(.25+fk*.15));
+    vec2 id=floor(q), f=fract(q)-.5;
+    float h=hash(id+fk*31.);
+    if(h>.8){ vec2 c=vec2(hash(id+5.)-.5,hash(id+9.)-.5)*.6; s+=smoothstep(.08,0.,length(f-c))*(.55+.45*sin(uTime*1.7+h*40.)); }
+  }
+  return s*.4;
+}
 vec3 under(vec2 uv){
   vec2 p=vec2((uv.x-.5)*uAspect, uv.y);
   vec3 col=mix(vec3(.008,.05,.11), vec3(.03,.26,.38), smoothstep(0.,.62,uv.y));
@@ -488,7 +499,7 @@ vec3 under(vec2 uv){
   float floorY=.12+.05*fbm3(vec2(p.x*1.8,3.));
   vec3 sand=vec3(.05,.14,.18)+vec3(.25,.6,.62)*c*.5+vec3(.03,.05,.05)*noise(p*40.);
   col=mix(col, sand, smoothstep(floorY+.01,floorY-.01,uv.y));
-  col+=pow(noise(p*60.+vec2(0.,uTime*.6)),18.)*.8;
+  col+=vec3(.8,.95,1.)*snow(p);
   col+=vec3(.75,.95,1.)*bubbles(p);
   col+=vec3(1.,.75,.35)*uGlow*.3*exp(-length(p-vec2(0.,.5))*2.);
   return col;
